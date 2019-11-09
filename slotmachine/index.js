@@ -154,6 +154,7 @@ async function getFeatures() {
 
     // Extract wins and losses into an array
     const wins = [];
+    let newGame = 0;
     session.contents.forEach((value) => {
       // Did the bankroll change in the request and response?
       if (value.request && value.request.session && value.request.session.attributes) {
@@ -164,11 +165,20 @@ async function getFeatures() {
         } else if (bankrollIn > bankrollOut) {
           wins.push(0);
         }
+
+        // Was a different game played (boolean value)? Look at currentGame and see if it changed
+        if (value.request.session.attributes.currentGame !== 
+            value.response.sessionAttributes.currentGame) {
+          newGame = 1;
+        }
       }
     });
 
     // Note number of spins
     features[user].spins = wins.length;
+
+    // Note whether the game changed
+    features[user].newGame = newGame;
 
     if (wins.length > 0) {
       // Calculate win ratio
@@ -198,8 +208,6 @@ async function getFeatures() {
       features[user].winStreak = -1;
       features[user].loseStreak = -1;
     }
-    console.log(wins);
-    console.log(features[user]);
 
     // Determine whether someone returned in the next 24 hours
     if (users[user].sessions.length > 1) {
@@ -215,16 +223,25 @@ async function getFeatures() {
 }
 
 getFeatures().then((features) => {
-  console.log(features);
-
+  // We're going to create two matrices (two models)
+  // spins.txt - those players who did a spin
+  //   features: length, spins, winRatio, winStreak, loseStreak, newGame
+  // nospins.txt - those player who did no spins
+  //   features: length, newGame
   // Create a features output file, then a results output file (vector)
-  let matrix = '';
+  let spins = '';
+  let nospins = '';
   Object.keys(features).forEach((user) => {
     const u = features[user];
-    matrix += `${u.length},${u.spins},${u.winRatio},${u.winStreak},${u.loseStreak},${u.result}\n`;
+    if (u.spins) {
+      spins += `${u.length},${u.spins},${u.winRatio},${u.winStreak},${u.loseStreak},${u.newGame},${u.result}\n`;
+    } else {
+      nospins += `${u.length},${u.newGame},${u.result}\n`;
+    }
   });
 
-  fs.writeFileSync('matrix.txt', matrix);
+  fs.writeFileSync('spins.txt', spins);
+  fs.writeFileSync('nospins.txt', nospins);
 });
 
 // Have fun with ML!
